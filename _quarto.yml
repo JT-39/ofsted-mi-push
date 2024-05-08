@@ -1,0 +1,15 @@
+project:
+  title: "rg-ofsted-mi-upload"
+
+  output-dir: ./04_Outputs/01_results/
+
+
+format:
+  html:
+    theme:
+      light: flatly   #Light theme to use
+      dark: darkly    # Dark theme to use
+    toc: true         # Use a table of contents for each post
+    toc_float: true
+    toc_depth: 2
+    embed-resources: true

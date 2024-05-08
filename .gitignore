@@ -1,0 +1,17 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+config.yml
+01_Data
+*/02_results
+*/03_figures
+*/04_tables
+03_Documentation/02_figures
+04_Outputs
+05_Misc/02_priv
+*.html
+*.xlsx
+
+/.quarto/

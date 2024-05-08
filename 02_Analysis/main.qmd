@@ -1,0 +1,157 @@
+---
+title: "Ofsted MI monthly data push"
+author: "Jake Tufts"
+date-modified: "`r Sys.Date()`"
+execute:
+  message: false
+  warning: false
+resource_files:
+- .Renviron
+- config.yml
+---
+
+This Quarto file scrapes data from the Ofsted website and pushes it to
+the relevant database.
+
+The dataset is the
+[State-funded school inspections and outcomes: management information]({{< env url_ofsted_mi >}}){target="_blank"}
+from Ofsted. The releases are monthly around the middle of the month
+(10-20th).
+
+This data is pushed into the SQL table `[Ofsted]`.
+
+```{r}
+#| label: load-functions
+
+source(here::here("R/helpers.R"))
+source(here::here("R/date_helpers.R"))
+source(here::here("R/scrape_data.R"))
+source(here::here("R/clean_data.R"))
+source(here::here("R/sql.R"))
+source(here::here("R/scrape_release_dates.R"))
+
+```
+
+
+```{r}
+#| label: start-month
+
+start_month <- get_start_month(date = Sys.Date())
+
+```
+
+## Scraping the Ofsted website
+
+The code below pulls the required data off the Ofsted website.
+A while loop is used to incrementally take off months from the current month
+until it finds a url which it is able to pull data off (in theory this
+is the previous available months data).
+This is used in case a publication is delayed by a month, otherwise the
+pipeline would fail.
+
+```{r}
+#| label: get-data
+
+
+# URL to Ofsted MI website
+ofsted_url <- paste0("https://www.gov.uk/government/statistical-data-sets/monthly-",
+                     "management-information-ofsteds-school-inspections-outcomes")
+
+# Get the path to the latest Ofsted MI .csv file on the Ofsted website
+ofsted_path <- get_data_path_and_month(month = start_month,
+                                       url = ofsted_url)
+
+# Extract snapshot date
+snapshot_date <- get_snapshot_date(ofsted_path = ofsted_path)
+
+# Download the CSV file from the web
+ofsted_raw <- load_ofsted_raw(ofsted_data_path = ofsted_path)
+
+```
+
+```{r}
+#| label: clean-data
+
+# Data cleaning to prepare append to SQL table
+ofsted_clean <- clean_ofsted(data_raw = ofsted_raw,
+                             snapshot_date = snapshot_date)
+
+```
+
+
+## Push data to database
+
+
+```{r}
+#| label: sql-connect
+
+dit_conn <- connect_sql_db(yml_key = "cred_dit")
+
+```
+
+This code tests to see whether the month used to pull in the data from
+the url already exists in the database. If it does it will throw up an
+error message (currently just printed text). This is to stop duplication
+of data due to the data being appended to the existing table.
+
+```{r}
+#| label: push-data
+#| warning: true
+
+# Pull existing date snapshots from SQL table
+existing_snapshots <- pull_snapshots(con = dit_conn)
+
+# Push cleaned Ofsted data to SQL safely.
+# Checks whether the data snapshot exists already in the SQL table.
+# Only pushes if it does not.
+safely_append_ofsted(latest_month = snapshot_date,
+                     existing_months = existing_snapshots,
+                     data = ofsted_clean,
+                     conn = dit_conn)
+
+DBI::dbDisconnect(dit_conn)
+
+```
+
+
+## Check data has been pushed to the database
+
+Run this code in the database
+(updating the date accordingly):
+
+```{{SQL}}
+select *
+from [db_name].[schema].[Ofsted]
+where DateStamp = convert(date, 'yyyy-mm-dd')
+```
+
+
+:::{.callout-tip title="Tip"}
+To drop rows from the SQL table using a where condition use:
+
+```{{SQL}}
+delete
+from [db_name].[schema].[Ofsted]
+where DateStamp = convert(date, 'yyyy-mm-dd')
+```
+:::
+
+<br>
+
+## Pull next release dates from Ofsted website
+
+```{r}
+#| label: get-releases
+
+raw_release_dates <- scrape_release_dates(url = ofsted_url)
+
+```
+
+
+```{r}
+#| label: format-releases
+
+future_release_dates <- format_release_dates(lines = raw_release_dates)
+
+```
+
