@@ -20,7 +20,10 @@ connect_sql_db <- function(yml_key) {
 
 
 # Pull existing snapshots from SQL table
-pull_snapshots <- function(conn) {
+pull_snapshots <- function(yml_key) {
+  conn <- connect_sql_db(yml_key)
+  on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
+
   DBI::dbGetQuery(conn,
                   paste0("select distinct(DateStamp) ",
                          "from [", Sys.getenv("schema_final"),"].[Ofsted]"))
@@ -56,8 +59,11 @@ drop_ofsted_temp <- function(conn) {
 # then append data
 safely_append_ofsted <- function(latest_month,
                                  existing_months,
-                                 conn,
+                                 yml_key,
                                  data) {
+  conn <- connect_sql_db(yml_key)
+  on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
+
   if(!(latest_month %in% dplyr::pull(existing_months))) {
 
     write_ofsted_temp(conn = conn, data= data)
@@ -79,3 +85,4 @@ safely_append_ofsted <- function(latest_month,
     ))
   }
 }
+
