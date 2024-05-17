@@ -1,0 +1,2 @@
+main:
+  script: 02_Analysis/_targets_main.R
