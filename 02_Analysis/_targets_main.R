@@ -1,14 +1,8 @@
 library(targets)
-# This is an example _targets.R file. Every
-# {targets} pipeline needs one.
-# Use tar_script() to create _targets.R and tar_edit()
-# to open it again for editing.
-# Then, run tar_make() to run the pipeline
-# and tar_read(data_summary) to view the results.
+# library(crew)
+
 
 # Define custom functions and other global objects.
-# This is where you write source(\"R/functions.R\")
-# if you keep your functions in external scripts.
 targets::tar_source(c(here::here("R/helpers.R"),
                       here::here("R/date_helpers.R"),
                       here::here("R/scrape_data.R"),
@@ -16,8 +10,11 @@ targets::tar_source(c(here::here("R/helpers.R"),
                       here::here("R/sql.R"),
                       here::here("R/scrape_release_dates.R")))
 
-# Set target-specific options such as packages:
-# tar_option_set(packages = "utils")
+# # Set target-specific options such as packages:
+# tar_option_set(
+#   controller = crew_controller_local(workers = 2)
+# )
+
 
 # End this file with a list of target objects.
 list(
@@ -47,5 +44,34 @@ list(
   # Data cleaning to prepare append to SQL table
   tar_target(ofsted_clean,
              clean_ofsted(data_raw = ofsted_raw,
-                          snapshot_date = snapshot_date))
+                          snapshot_date = snapshot_date)),
+
+  # SQL yaml key
+  tar_target(sql_creds,
+             "cred_dit"),
+
+  # Connect to SQL
+  tar_target(dit_conn,
+             connect_sql_db(yml_key = sql_creds)),
+
+  # Pull existing date snapshots from SQL table
+  tar_target(existing_snapshots,
+             pull_snapshots(yml_key = sql_creds)),
+
+  # Push cleaned Ofsted data to SQL safely.
+  # Checks whether the data snapshot exists already in the SQL table.
+  # Only pushes if it does not.
+  tar_target(ofsted_mi_append,
+             safely_append_ofsted(latest_month = snapshot_date,
+                                  existing_months = existing_snapshots,
+                                  data = ofsted_clean,
+                                  yml_key = sql_creds)),
+
+  # Get release dates
+  tar_target(raw_release_dates,
+             scrape_release_dates(url = ofsted_url)),
+
+  # Format release dates
+  tar_target(future_release_dates,
+             format_release_dates(lines = raw_release_dates))
 )
